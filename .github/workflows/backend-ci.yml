@@ -103,7 +103,7 @@ jobs:
           --health-retries 5
         ports:
           - 6379:6379
-
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -128,10 +128,45 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
 
+  db-connect-check:
+    runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: MongoDB connection smoke test
+        if: env.MONGODB_URI != ''
+        run: |
+          node -e "const mongoose=require('mongoose');(async()=>{try{await mongoose.connect(process.env.MONGODB_URI,{useNewUrlParser:true,useUnifiedTopology:true});console.log('Mongo OK');process.exit(0);}catch(e){console.error(e);process.exit(1);}})()"
+        continue-on-error: true
+
+  blockchain-smoke-check:
+    runs-on: ubuntu-latest
+    env:
+      BLOCKCHAIN_PROVIDER_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install web3
+        run: npm i web3
+      - name: Provider and block number check
+        if: env.BLOCKCHAIN_PROVIDER_URL != ''
+        run: |
+          node -e "const Web3=require('web3');const w=new Web3(new Web3.providers.HttpProvider(process.env.BLOCKCHAIN_PROVIDER_URL));w.eth.getBlockNumber().then(n=>{console.log('BlockNumber',n);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})"
+        continue-on-error: true
+
   build:
     runs-on: ubuntu-latest
     needs: [ lint, test ]
-
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -157,11 +192,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-
+    
     permissions:
       contents: read
       packages: write
-
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -199,7 +234,7 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     needs: build
-
+    
     steps:
       - uses: actions/checkout@v4
 
